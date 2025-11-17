@@ -1,24 +1,32 @@
 from fastapi import FastAPI, HTTPException
 from app.biblioteca import textos
-from app.schemas import TypeDataPost
+from app.schemas import TypeDataPost,TypeDataReturn
+from app.db import Post, get_session, criar_db_e_tabelas
+from sqlalchemy.ext.asyncio import AsyncSession
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await criar_db_e_tabelas()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/posts")
-async def Mostrar_posts(limite:int = None):
+async def Mostrar_posts(limite:int = None): 
     if limite:
         return list(textos.values())[:limite]
     return textos
 
 @app.get("/posts/{id_post}")
-async def mostrar_post_especifico(id_post:int):
+async def mostrar_post_especifico(id_post:int) -> TypeDataReturn:
     if id_post not in textos:
         raise HTTPException(status_code=404, detail="Post não encontrado")
     
     return textos.get(id_post, {"erro": "Post não encontrado"})
 
 @app.post("/posts")
-async def criar_post(id:int, post: TypeDataPost):
+async def criar_post(id:int, post: TypeDataPost) -> TypeDataReturn:
     if id in textos:
         raise HTTPException(status_code=400, detail="Post com esse ID já existe")
     
