@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException,File, UploadFile,Form,Depends
 from app.biblioteca import textos
 from app.schemas import TypeDataPost,TypeDataReturn
 from app.db import Post, get_session, criar_db_e_tabelas
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
+from sqlalchemy import select
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,42 +13,30 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get("/posts")
-async def Mostrar_posts(limite:int = None): 
-    if limite:
-        return list(textos.values())[:limite]
-    return textos
-
-@app.get("/posts/{id_post}")
-async def mostrar_post_especifico(id_post:int) -> TypeDataReturn:
-    if id_post not in textos:
-        raise HTTPException(status_code=404, detail="Post não encontrado")
+@app.post("/upload")
+async def upload_arquivo(
+    arquivo: UploadFile = File(...),
+    legenda: str = Form(...),
+    session: AsyncSession = Depends(get_session)
+):
+    post = Post(
+        legenda = legenda,
+        url = "qualquercoisa",
+        tipo_arquivo = "foto",
+        nome_arquivo = "nome_arquivo"
+    )
     
-    return textos.get(id_post, {"erro": "Post não encontrado"})
+    session.add(post)
+    await session.commit()
+    await session.refresh(post)
+    return post
 
-@app.post("/posts")
-async def criar_post(id:int, post: TypeDataPost) -> TypeDataReturn:
-    if id in textos:
-        raise HTTPException(status_code=400, detail="Post com esse ID já existe")
+@app.get("/feed")
+async def obter_feed(
+    session: AsyncSession = Depends(get_session)
+):
+    resultado = await session.execute(select(Post).order_by(Post.criado_em.desc()))
+    posts = resultado.scalars().all()
+    return posts
     
-    max_id = max(textos.keys()) if textos else 0
-    if id > max_id + 1:
-        raise HTTPException(status_code=400, detail="ID inválido")
     
-    textos[id] = {
-        "titulo": post.titulo,
-        "conteudo": post.conteudo
-    }
-    return textos[id]
-
-@app.delete("/posts/{id_post}")
-async def deletar_post(id_post:int):
-    if id_post not in textos:
-        raise HTTPException(status_code=404, detail="post nao encontrado")
-    del textos[id_post]
-    return {"detail": "Post deletado com sucesso"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
